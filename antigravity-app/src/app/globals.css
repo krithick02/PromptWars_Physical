@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+@theme {
+  --color-canvas: #09090b;
+  --color-panel: #141416;
+  --color-border: #27272a;
+  --color-accent: #c2a87e;
+  --color-danger: #991b1b;
+  --color-success: #166534;
+  --color-amber: #b45309;
+  --font-sans: var(--font-inter), var(--font-outfit), "Segoe UI", sans-serif;
+  
+  /* Standard Spacing Tokens */
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --spacing-huge: 48px;
+
+  /* Standard Rounding Tokens */
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-xl: 32px;
+  --radius-full: 9999px;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-canvas);
+    color: #e2e2e7;
+    font-family: var(--font-sans);
+    margin: 0;
+    overflow: hidden; 
+    background-image: 
+      linear-gradient(to bottom right, #09090b, #111113);
+  }
+}
+
+.glass-panel {
+  background: var(--color-panel);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+}
+
+/* Removed all neon 'glow' classes in favor of executive shadows */
+.shadow-executive {
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4), 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+.shadow-danger-muted {
+  box-shadow: 0 10px 40px rgba(153, 27, 27, 0.1), 0 0 1px rgba(153, 27, 27, 0.2);
+}
+
+/* Scrollbar hiding for seamless UI */
+::-webkit-scrollbar {
+  display: none;
+}
