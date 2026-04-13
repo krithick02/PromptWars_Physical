@@ -8,24 +8,24 @@ import ClientNotification from "./ClientNotification";
 
 export default function PhysicsEngine() {
   const sceneRef = useRef<HTMLDivElement>(null);
+  // Matter.js core references
   const engineRef = useRef<Matter.Engine | null>(null);
   const renderRef = useRef<Matter.Render | null>(null);
-  
+  const gatesRef = useRef<{ [key: string]: Matter.Body }>({});
+  const particlesRef = useRef<Matter.Body[]>([]);
+
   // Simulation State
   const [densities, setDensities] = useState({ gateA: 0.1, gateB: 0.5, gateC: 0.2 });
   const [antiGravity, setAntiGravity] = useState({ gateA: false, gateB: false, gateC: false });
   const [repulsiveField, setRepulsiveField] = useState({ gateA: false, gateB: false, gateC: false });
   const [showClientAlert, setShowClientAlert] = useState(false);
 
-  // Matter references
-  const gatesRef = useRef<{ [key: string]: Matter.Body }>({});
-
+  // 1. Initialize Engine & Static World
   useEffect(() => {
     if (!sceneRef.current) return;
 
-    // 1. Setup Engine & Render
     const engine = Matter.Engine.create();
-    engine.world.gravity.y = 1; 
+    engine.world.gravity.y = 1;
     engineRef.current = engine;
 
     const render = Matter.Render.create({
@@ -40,49 +40,35 @@ export default function PhysicsEngine() {
     });
     renderRef.current = render;
 
-    // 2. Create Boundary Walls
-    const wallOptions = { isStatic: true, render: { fillStyle: "#18181b" } };
+    // Boundary walls
+    const wallOptions = { isStatic: true, render: { fillStyle: "#1a1a1a" } };
     Matter.World.add(engine.world, [
       Matter.Bodies.rectangle(window.innerWidth / 2, window.innerHeight + 50, window.innerWidth, 100, wallOptions),
       Matter.Bodies.rectangle(-50, window.innerHeight / 2, 100, window.innerHeight, wallOptions),
       Matter.Bodies.rectangle(window.innerWidth + 50, window.innerHeight / 2, 100, window.innerHeight, wallOptions),
     ]);
 
-    // 3. Create Gate Nodes - Matte Slate & Gold
-    const gateStyles = {
-      default: { fillStyle: "#27272a", strokeStyle: "#c2a87e", lineWidth: 1 },
-      danger: { fillStyle: "#450a0a", strokeStyle: "#991b1b", lineWidth: 2 },
-    };
-
-    const gateA = Matter.Bodies.rectangle(window.innerWidth * 0.2, window.innerHeight * 0.6, 200, 80, { 
-      isStatic: false, density: 0.05, frictionAir: 0.1, label: "Gate A", render: gateStyles.default 
-    });
-    const gateB = Matter.Bodies.rectangle(window.innerWidth * 0.5, window.innerHeight * 0.6, 200, 80, { 
-      isStatic: false, density: 0.05, frictionAir: 0.1, label: "Gate B", render: gateStyles.default 
-    });
-    const gateC = Matter.Bodies.rectangle(window.innerWidth * 0.8, window.innerHeight * 0.6, 200, 80, { 
-      isStatic: false, density: 0.05, frictionAir: 0.1, label: "Gate C", render: gateStyles.default 
-    });
-
+    // Gate bodies
+    const gateOptions = { isStatic: false, density: 0.05, frictionAir: 0.1, render: { fillStyle: "#27272a", strokeStyle: "#c2a87e", lineWidth: 1 } };
+    const gateA = Matter.Bodies.rectangle(window.innerWidth * 0.2, window.innerHeight * 0.6, 200, 80, { ...gateOptions, label: "Gate A" });
+    const gateB = Matter.Bodies.rectangle(window.innerWidth * 0.5, window.innerHeight * 0.6, 200, 80, { ...gateOptions, label: "Gate B" });
+    const gateC = Matter.Bodies.rectangle(window.innerWidth * 0.8, window.innerHeight * 0.6, 200, 80, { ...gateOptions, label: "Gate C" });
+    
     gatesRef.current = { gateA, gateB, gateC };
 
-    const attachConstraint = (body: Matter.Body, x: number, y: number) => {
-      return Matter.Constraint.create({
-        pointA: { x, y },
-        bodyB: body,
-        stiffness: 0.005,
-        damping: 0.1,
-        render: { visible: false } 
-      });
-    };
+    // Constraints (Tethers)
+    const attach = (body: Matter.Body, x: number, y: number) => Matter.Constraint.create({
+      pointA: { x, y }, bodyB: body, stiffness: 0.005, damping: 0.1, render: { visible: false }
+    });
 
     Matter.World.add(engine.world, [
       gateA, gateB, gateC,
-      attachConstraint(gateA, window.innerWidth * 0.2, window.innerHeight * 0.4),
-      attachConstraint(gateB, window.innerWidth * 0.5, window.innerHeight * 0.4),
-      attachConstraint(gateC, window.innerWidth * 0.8, window.innerHeight * 0.4),
+      attach(gateA, window.innerWidth * 0.2, window.innerHeight * 0.4),
+      attach(gateB, window.innerWidth * 0.5, window.innerHeight * 0.4),
+      attach(gateC, window.innerWidth * 0.8, window.innerHeight * 0.4),
     ]);
 
+    // Mouse Interaction
     const mouse = Matter.Mouse.create(render.canvas);
     const mouseConstraint = Matter.MouseConstraint.create(engine, {
       mouse: mouse,
@@ -91,65 +77,74 @@ export default function PhysicsEngine() {
     Matter.World.add(engine.world, mouseConstraint);
     render.mouse = mouse;
 
-    // Particles are now light slate dots, no neon.
-    const particleInterval = setInterval(() => {
-        const xPos = window.innerWidth * 0.5 + (Math.random() * 400 - 200);
-        const particle = Matter.Bodies.circle(xPos, -20, Math.random() * 3 + 2, {
-            friction: 0,
-            restitution: 0.8,
-            render: { fillStyle: "#a1a1aa", opacity: 0.5 }
-        });
-
-        Matter.World.add(engine.world, particle);
-
-        setTimeout(() => {
-            if (particle.position.y > window.innerHeight) {
-                Matter.World.remove(engine.world, particle);
-            }
-        }, 15000);
-    }, 400);
-
-    Matter.Events.on(engine, 'beforeUpdate', () => {
-        const gates = gatesRef.current;
-        if (!gates) return;
-
-        if (antiGravity.gateB) {
-            Matter.Body.applyForce(gates.gateB, gates.gateB.position, { x: 0, y: -0.05 });
-            gates.gateB.render.strokeStyle = "#166534"; // Muted Success
-        } else if (densities.gateB > 0.8) {
-            Matter.Body.applyForce(gates.gateB, gates.gateB.position, { x: 0, y: 0.08 });
-            gates.gateB.render.strokeStyle = "#991b1b"; // Muted Danger
-        } else {
-             gates.gateB.render.strokeStyle = "#c2a87e";
-        }
-
-        if (repulsiveField.gateB) {
-            const bodies = Matter.Composite.allBodies(engine.world);
-            for (let i = 0; i < bodies.length; i++) {
-                const body = bodies[i];
-                if (body.label === "Gate B" || body.isStatic) continue;
-                
-                const dist = Matter.Vector.magnitude(Matter.Vector.sub(gates.gateB.position, body.position));
-                if (dist < 300) {
-                    const forceMagnitude = 0.005 * (300 - dist) / 300;
-                    Matter.Body.applyForce(body, body.position, {
-                        x: body.position.x < gates.gateB.position.x ? -forceMagnitude : forceMagnitude,
-                        y: -forceMagnitude 
-                    });
-                }
-            }
-        }
-    });
-
     Matter.Runner.run(engine);
     Matter.Render.run(render);
 
+    // Particle Emitter
+    const interval = setInterval(() => {
+      const x = window.innerWidth * 0.5 + (Math.random() * 600 - 300);
+      const particle = Matter.Bodies.circle(x, -20, Math.random() * 3 + 2, {
+        friction: 0, restitution: 0.8, render: { fillStyle: "#a1a1aa", opacity: 0.4 }
+      });
+      Matter.World.add(engine.world, particle);
+      particlesRef.current.push(particle);
+      
+      // Cleanup off-screen particles
+      if (particlesRef.current.length > 50) {
+        const oldest = particlesRef.current.shift();
+        if (oldest) Matter.World.remove(engine.world, oldest);
+      }
+    }, 400);
+
     return () => {
-      clearInterval(particleInterval);
+      clearInterval(interval);
       Matter.Render.stop(render);
       Matter.Engine.clear(engine);
       if (render.canvas) render.canvas.remove();
     };
+  }, []); // Once on mount
+
+  // 2. Dynamic State Updates (The "Update Loop")
+  useEffect(() => {
+    const engine = engineRef.current;
+    if (!engine) return;
+
+    const updateLoop = () => {
+      const gates = gatesRef.current;
+      if (!gates) return;
+
+      // Handle Gate B (surges/anti-gravity)
+      if (antiGravity.gateB) {
+        Matter.Body.applyForce(gates.gateB, gates.gateB.position, { x: 0, y: -0.06 });
+        gates.gateB.render.strokeStyle = "#22c55e"; // Success Green
+        gates.gateB.render.lineWidth = 3;
+      } else if (densities.gateB > 0.8) {
+        Matter.Body.applyForce(gates.gateB, gates.gateB.position, { x: 0, y: 0.1 }); // Sinking
+        gates.gateB.render.strokeStyle = "#ef4444"; // Danger Red
+        gates.gateB.render.lineWidth = 3;
+      } else {
+        gates.gateB.render.strokeStyle = "#c2a87e";
+        gates.gateB.render.lineWidth = 1;
+      }
+
+      // Repulsive Field logic for particles
+      if (repulsiveField.gateB) {
+        const allBodies = Matter.Composite.allBodies(engine.world);
+        allBodies.forEach(body => {
+          if (body.label === "Gate B" || body.isStatic) return;
+          const dist = Matter.Vector.magnitude(Matter.Vector.sub(gates.gateB.position, body.position));
+          if (dist < 320) {
+            const force = 0.007 * (320 - dist) / 320;
+            Matter.Body.applyForce(body, body.position, {
+              x: body.position.x < gates.gateB.position.x ? -force : force, y: -force * 0.5
+            });
+          }
+        });
+      }
+    };
+
+    Matter.Events.on(engine, 'beforeUpdate', updateLoop);
+    return () => Matter.Events.off(engine, 'beforeUpdate', updateLoop);
   }, [antiGravity, densities, repulsiveField]);
 
   const triggerSurge = () => {

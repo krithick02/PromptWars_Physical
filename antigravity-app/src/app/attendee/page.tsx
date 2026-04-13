@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { QrCode, Ticket, CheckCircle2, Loader2, ArrowLeft, ScanLine, UtensilsCrossed, Coffee, ShoppingBag, MapPin, Plus, Minus, CreditCard, AlertTriangle, Radio } from "lucide-react";
+import { QrCode, Ticket, CheckCircle2, Loader2, ArrowLeft, UtensilsCrossed, ShoppingBag, MapPin, Plus, Minus, AlertTriangle, Radio, Activity, Navigation, Clock, TrendingUp, TrendingDown, Minus as Minus2, CheckCircle } from "lucide-react";
 import Link from "next/link";
 import EmergencySOS from "@/components/EmergencySOS";
 import CriticalCrowdAlert from "@/components/CriticalCrowdAlert";
@@ -20,7 +20,45 @@ export default function AttendeePortal() {
   const [criticalZone, setCriticalZone] = useState<{ name: string; density: number } | null>(null);
   const [lastAlertTime, setLastAlertTime] = useState<number>(0);
 
-  const [activeTab, setActiveTab] = useState<"ticket" | "concessions" | "sos">("ticket");
+  const [activeTab, setActiveTab] = useState<"ticket" | "concessions" | "sos" | "status">("ticket");
+
+  // ── Live Zone Status for Attendees ────────────────────────────────────────
+  const ZONES_INITIAL = useMemo(() => [
+    { id: "gate-a",    name: "Gate A",       capacity: 2000, count: 820,  waitTime: 4,  icon: "🅰️" },
+    { id: "gate-b",    name: "Gate B",       capacity: 2000, count: 1560, waitTime: 11, icon: "🅱️" },
+    { id: "gate-c",    name: "Gate C",       capacity: 2000, count: 1840, waitTime: 18, icon: "🅲"  },
+    { id: "food-ct",   name: "Food Court",   capacity: 2500, count: 1900, waitTime: 22, icon: "🍔" },
+    { id: "restrooms", name: "Restrooms",    capacity: 300,  count: 155,  waitTime: 6,  icon: "🚻" },
+    { id: "merch",     name: "Merch Stand",  capacity: 400,  count: 210,  waitTime: 8,  icon: "👕" },
+  ], []);
+
+  const [zones, setZones] = useState(ZONES_INITIAL);
+
+  // Simulate crowd fluctuations (same pattern as ops dashboard)
+  useEffect(() => {
+    const tick = setInterval(() => {
+      setZones(prev => prev.map(z => {
+        const change = Math.floor(Math.random() * 60) - 20;
+        const newCount = Math.max(z.capacity * 0.3, Math.min(z.count + change, z.capacity * 0.95));
+        const ratio = newCount / z.capacity;
+        const waitTime = Math.round(Math.pow(ratio, 2) * (z.id === "food-ct" ? 45 : z.id === "restrooms" ? 20 : 25));
+        return { ...z, count: Math.round(newCount), waitTime };
+      }));
+    }, 2000);
+    return () => clearInterval(tick);
+  }, []);
+
+  const recommendedZone = useMemo(() =>
+    [...zones].sort((a, b) => (a.count / a.capacity) - (b.count / b.capacity))[0],
+    [zones]
+  );
+
+  const getZoneStatus = useCallback((count: number, capacity: number) => {
+    const r = count / capacity;
+    if (r >= 0.85) return { label: "Busy",     color: "#ef4444", bg: "#991b1b", icon: TrendingUp };
+    if (r >= 0.60) return { label: "Moderate", color: "#f59e0b", bg: "#b45309", icon: Minus2    };
+    return              { label: "Open",     color: "#22c55e", bg: "#166534", icon: TrendingDown };
+  }, []);
   
   const [cart, setCart] = useState<Record<string, number>>({});
   const [orderState, setOrderState] = useState<"menu" | "processing" | "pickup">("menu");
@@ -231,6 +269,138 @@ export default function AttendeePortal() {
                                         </div>
                                     </motion.div>
                                 )}
+
+                                {activeTab === "status" && (
+                                    <motion.div
+                                        key="status-view"
+                                        initial={{ opacity: 0, y: 10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        exit={{ opacity: 0, y: 10 }}
+                                        className="w-full max-w-sm flex flex-col gap-5"
+                                        role="region"
+                                        aria-label="Live venue crowd status"
+                                    >
+                                        {/* Header */}
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <h2 className="text-xl font-light uppercase tracking-tight text-[#fafafa]">Live Status</h2>
+                                                <p className="text-[9px] text-[#52525b] font-bold uppercase tracking-[0.3em] mt-1">Updates every 2 seconds</p>
+                                            </div>
+                                            <div className="flex items-center gap-2 px-4 py-2 bg-[#166534]/10 border border-[#166534]/20 rounded-full">
+                                                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                                                <span className="text-[9px] font-bold uppercase tracking-widest text-green-400">Live</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Recommended Entrance Banner */}
+                                        <motion.div
+                                            key={recommendedZone.id}
+                                            initial={{ opacity: 0, scale: 0.98 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            className="bg-[#0d2318] border border-[#166534]/40 rounded-[2rem] p-8 relative overflow-hidden"
+                                            role="alert"
+                                            aria-live="polite"
+                                        >
+                                            <div className="flex items-start gap-5">
+                                                <div className="p-3 bg-green-500/10 rounded-xl border border-green-500/20 shrink-0">
+                                                    <Navigation className="w-5 h-5 text-green-400" />
+                                                </div>
+                                                <div className="flex-1">
+                                                    <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-green-400 mb-2">Recommended Route</p>
+                                                    <h3 className="text-[#fafafa] font-medium text-base tracking-tight">{recommendedZone.name}</h3>
+                                                    <p className="text-[10px] text-[#71717a] font-bold uppercase tracking-widest mt-2">
+                                                        {Math.round((recommendedZone.count / recommendedZone.capacity) * 100)}% capacity · ~{recommendedZone.waitTime} MIN wait
+                                                    </p>
+                                                </div>
+                                                <div className="text-3xl shrink-0">{recommendedZone.icon}</div>
+                                            </div>
+                                            <p className="text-[10px] text-green-300/60 font-bold uppercase tracking-widest mt-6 leading-relaxed">
+                                                Head here for fastest entry and minimal waiting time.
+                                            </p>
+                                        </motion.div>
+
+                                        {/* Zone Grid */}
+                                        <div className="flex flex-col gap-3" role="list" aria-label="Zone crowd status">
+                                            {zones.map(zone => {
+                                                const status = getZoneStatus(zone.count, zone.capacity);
+                                                const ratio  = zone.count / zone.capacity;
+                                                const StatusIcon = status.icon;
+                                                const isRecommended = zone.id === recommendedZone.id;
+
+                                                return (
+                                                    <motion.div
+                                                        key={zone.id}
+                                                        layout
+                                                        role="listitem"
+                                                        className={`bg-[#141416] border rounded-2xl p-6 flex flex-col gap-4 transition-all ${
+                                                            isRecommended
+                                                                ? "border-green-500/30 bg-[#0d2318]/60"
+                                                                : "border-white/[0.04]"
+                                                        }`}
+                                                        aria-label={`${zone.name}: ${status.label}, ${Math.round(ratio * 100)}% full, ${zone.waitTime} minute wait`}
+                                                    >
+                                                        <div className="flex items-center justify-between">
+                                                            <div className="flex items-center gap-4">
+                                                                <span className="text-2xl" aria-hidden="true">{zone.icon}</span>
+                                                                <div>
+                                                                    <h4 className="font-bold text-[#fafafa] text-sm tracking-tight flex items-center gap-2">
+                                                                        {zone.name}
+                                                                        {isRecommended && (
+                                                                            <span className="text-[8px] font-bold uppercase tracking-widest text-green-400 bg-green-500/10 border border-green-500/20 px-2 py-0.5 rounded-full">
+                                                                                Best
+                                                                            </span>
+                                                                        )}
+                                                                    </h4>
+                                                                    <div className="flex items-center gap-3 mt-1">
+                                                                        <Clock className="w-3 h-3 text-[#52525b]" aria-hidden="true" />
+                                                                        <span className="text-[9px] text-[#52525b] font-bold uppercase tracking-widest">
+                                                                            ~{zone.waitTime} MIN wait
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex flex-col items-end gap-2">
+                                                                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full" style={{ backgroundColor: `${status.bg}20`, border: `1px solid ${status.bg}40` }}>
+                                                                    <StatusIcon className="w-3 h-3" style={{ color: status.color }} aria-hidden="true" />
+                                                                    <span className="text-[9px] font-bold uppercase tracking-wider" style={{ color: status.color }}>
+                                                                        {status.label}
+                                                                    </span>
+                                                                </div>
+                                                                <span className="text-lg font-light tabular-nums tracking-tighter" style={{ color: status.color }}>
+                                                                    {Math.round(ratio * 100)}%
+                                                                </span>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Capacity bar */}
+                                                        <div className="w-full bg-[#09090b] h-1 rounded-full overflow-hidden" role="progressbar" aria-valuenow={Math.round(ratio * 100)} aria-valuemin={0} aria-valuemax={100}>
+                                                            <motion.div
+                                                                className="h-full rounded-full"
+                                                                animate={{ width: `${ratio * 100}%` }}
+                                                                transition={{ ease: "linear", duration: 0.8 }}
+                                                                style={{ backgroundColor: status.color }}
+                                                            />
+                                                        </div>
+                                                    </motion.div>
+                                                );
+                                            })}
+                                        </div>
+
+                                        {/* Legend */}
+                                        <div className="flex justify-center gap-6 py-4">
+                                            {[
+                                                { color: "#22c55e", label: "Open (<60%)"    },
+                                                { color: "#f59e0b", label: "Moderate (60–85%)" },
+                                                { color: "#ef4444", label: "Busy (>85%)"  },
+                                            ].map(l => (
+                                                <div key={l.label} className="flex items-center gap-2">
+                                                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: l.color }} />
+                                                    <span className="text-[8px] font-bold uppercase tracking-wider text-[#52525b]">{l.label}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </motion.div>
+                                )}
                             </AnimatePresence>
                         </div>
                     </motion.div>
@@ -242,26 +412,37 @@ export default function AttendeePortal() {
         {step === "app" && (
             <motion.nav initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="fixed bottom-0 left-0 w-full z-50 px-8 pb-10 pt-4 bg-gradient-to-t from-[#09090b] to-transparent">
                 <div className="bg-[#1c1c1f] border border-white/5 rounded-3xl p-3 shadow-2xl flex justify-between items-center">
-                    <button 
-                        onClick={() => setActiveTab("ticket")} 
+                    <button
+                        onClick={() => setActiveTab("ticket")}
+                        aria-label="My Ticket"
                         className={`flex-grow flex flex-col items-center gap-2 transition-all duration-300 py-3 rounded-2xl ${activeTab === "ticket" ? "text-[#c2a87e] bg-[#c2a87e]/10" : "text-[#52525b] hover:text-[#a1a1aa]"}`}
                     >
-                        <Ticket className="w-6 h-6" />
-                        <span className="text-[8px] font-bold uppercase tracking-[0.2em]">Credential</span>
+                        <Ticket className="w-5 h-5" />
+                        <span className="text-[8px] font-bold uppercase tracking-[0.2em]">Ticket</span>
                     </button>
-                    <button 
-                        onClick={() => setActiveTab("concessions")} 
+                    <button
+                        onClick={() => setActiveTab("status")}
+                        aria-label="Live crowd status"
+                        className={`flex-grow flex flex-col items-center gap-2 transition-all duration-300 py-3 rounded-2xl ${activeTab === "status" ? "text-[#c2a87e] bg-[#c2a87e]/10" : "text-[#52525b] hover:text-[#a1a1aa]"}`}
+                    >
+                        <Activity className="w-5 h-5" />
+                        <span className="text-[8px] font-bold uppercase tracking-[0.2em]">Status</span>
+                    </button>
+                    <button
+                        onClick={() => setActiveTab("concessions")}
+                        aria-label="Order food and drinks"
                         className={`flex-grow flex flex-col items-center gap-2 transition-all duration-300 py-3 rounded-2xl ${activeTab === "concessions" ? "text-[#c2a87e] bg-[#c2a87e]/10" : "text-[#52525b] hover:text-[#a1a1aa]"}`}
                     >
-                        <UtensilsCrossed className="w-6 h-6" />
-                        <span className="text-[8px] font-bold uppercase tracking-[0.2em]">Supply</span>
+                        <UtensilsCrossed className="w-5 h-5" />
+                        <span className="text-[8px] font-bold uppercase tracking-[0.2em]">Food</span>
                     </button>
-                    <button 
-                        onClick={() => setActiveTab("sos")} 
+                    <button
+                        onClick={() => setActiveTab("sos")}
+                        aria-label="Emergency SOS"
                         className={`flex-grow flex flex-col items-center gap-2 transition-all duration-300 py-3 rounded-2xl ${activeTab === "sos" ? "text-[#ef4444] bg-[#991b1b]/10" : "text-[#52525b] hover:text-[#a1a1aa]"}`}
                     >
-                        <Radio className="w-6 h-6" />
-                        <span className="text-[8px] font-bold uppercase tracking-[0.2em]">Resource</span>
+                        <Radio className="w-5 h-5" />
+                        <span className="text-[8px] font-bold uppercase tracking-[0.2em]">SOS</span>
                     </button>
                 </div>
             </motion.nav>
