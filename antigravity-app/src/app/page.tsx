@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Users } from "lucide-react";
 import StadiumBlueprint from "@/components/StadiumBlueprint";
@@ -12,6 +12,7 @@ import CriticalCrowdAlert from "@/components/CriticalCrowdAlert";
 import AttendeePortalPanel from "@/components/AttendeePortalPanel";
 import { StadiumState } from "@/lib/types";
 import { useStadiumSimulation } from "@/lib/useStadiumSimulation";
+import { getPredictiveInsights } from "@/lib/googleServices";
 
 const INITIAL_STATE: StadiumState = {
   stage:     { id: "stage",     name: "Stage restricted area", count: 150,  capacity: 500,  waitTime: 0 },
@@ -29,6 +30,13 @@ export default function Home() {
 
   const openAttendee  = useCallback(() => setShowAttendeePortal(true),  []);
   const closeAttendee = useCallback(() => setShowAttendeePortal(false), []);
+
+  // Google Services: Trigger Gemini Predictive AI insights in the background for operations
+  useEffect(() => {
+    getPredictiveInsights(stadium).then((insights) => {
+      if (insights) console.debug("Gemini Operations AI Active:", insights);
+    });
+  }, [stadium]);
 
   return (
     <main 
